@@ -1,3 +1,10 @@
+Ditto LOCAL
+
+This project is currently in experimentation phases, with the intention to allow ditto to be used with local llm tools like ollama and lm studio. This will help make the tool more accesible and cheaper to use (no paid API rates), on the other hand its likely to perform worse due to lower powered llms that can be run locally. 
+Seems like a fun project to take on considering the open source llms are continuing to improve greatly.
+
+
+
 # Ditto
 
 [![License](https://img.shields.io/github/license/yoheinakajima/ditto)](LICENSE)
