@@ -1,0 +1,13 @@
+{
+    "provider": "openai",  // Options: "openai", "ollama", "lmstudio"
+    "openai": {
+        "api_key": "your_openai_api_key"
+    },
+    "ollama": {
+        "host": "localhost",
+        "port": 5000
+    },
+    "lmstudio": {
+        "model_path": "/path/to/your/model"
+    }
+}
