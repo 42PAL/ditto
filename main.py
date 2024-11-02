@@ -6,8 +6,7 @@ import traceback
 from flask import Flask, Blueprint, request, send_from_directory, render_template_string, jsonify
 from threading import Thread
 from time import sleep
-
-# Correctly import the completion function from LiteLLM
+from providers import OpenAIProvider, OllamaProvider, LMStudioProvider
 from litellm import completion, supports_function_calling
 
 # Configuration
@@ -33,11 +32,30 @@ progress = {
     "completed": False
 }
 
+# Load configuration for AI providers
+def load_config():
+    with open("config.json") as f:
+        return json.load(f)
+
+def initialize_provider(config):
+    provider = config["provider"]
+    if provider == "openai":
+        return OpenAIProvider(api_key=config["openai"]["api_key"])
+    elif provider == "ollama":
+        return OllamaProvider(host=config["ollama"]["host"], port=config["ollama"]["port"])
+    elif provider == "lmstudio":
+        return LMStudioProvider(model_path=config["lmstudio"]["model_path"])
+    else:
+        raise ValueError(f"Unsupported provider: {provider}")
+
+# Set up AI provider based on configuration
+config = load_config()
+ai_provider = initialize_provider(config)
+
 # Ensure directories exist and create __init__.py in routes
 def create_directory(path):
     if not os.path.exists(path):
         os.makedirs(path)
-        # If creating the routes directory, add __init__.py
         if path == ROUTES_DIR:
             create_file(os.path.join(ROUTES_DIR, '__init__.py'), '')
         return f"Created directory: {path}"
@@ -86,7 +104,6 @@ def load_routes():
                         importlib.import_module(module_path)
                     module = sys.modules.get(module_path)
                     if module:
-                        # Find all blueprint objects in the module
                         for attr_name in dir(module):
                             attr = getattr(module, attr_name)
                             if isinstance(attr, Blueprint):
@@ -121,7 +138,6 @@ def log_to_file(history_dict):
     except Exception as e:
         pass  # Silent fail
 
-# Default route to serve generated index.html or render a form
 @app.route('/', methods=['GET', 'POST'])
 def home():
     index_file = os.path.join(TEMPLATES_DIR, 'index.html')
@@ -130,7 +146,6 @@ def home():
     else:
         if request.method == 'POST':
             user_input = request.form.get('user_input')
-            # Run the main loop with the user's input in a separate thread
             progress["status"] = "running"
             progress["iteration"] = 0
             progress["output"] = ""
@@ -164,7 +179,6 @@ def home():
                 </form>
             ''')
 
-# Route to provide progress updates
 @app.route('/progress')
 def get_progress():
     return jsonify(progress)
@@ -178,7 +192,6 @@ available_functions = {
     "task_completed": task_completed
 }
 
-# Define the tools for function calling
 tools = [
     {
         "type": "function",
@@ -271,7 +284,6 @@ tools = [
 ]
 
 def run_main_loop(user_input):
-    # Reset the history_dict for each run
     history_dict = {
         "iterations": []
     }
@@ -282,39 +294,13 @@ def run_main_loop(user_input):
         progress["completed"] = True
         return "Model does not support function calling."
 
-    max_iterations = progress["max_iterations"]  # Prevent infinite loops
+    max_iterations = progress["max_iterations"]
     iteration = 0
-
-    # Updated messages array with enhanced prompt
     messages = [
         {
             "role": "system",
             "content": (
-                "You are an expert Flask developer tasked with building a complete, production-ready Flask application based on the user's description. "
-                "Before coding, carefully plan out all the files, routes, templates, and static assets needed. "
-                "Follow these steps:\n"
-                "1. **Understand the Requirements**: Analyze the user's input to fully understand the application's functionality and features.\n"
-                "2. **Plan the Application Structure**: List all the routes, templates, and static files that need to be created. Consider how they interact.\n"
-                "3. **Implement Step by Step**: For each component, use the provided tools to create directories, files, and write code. Ensure each step is thoroughly completed before moving on.\n"
-                "4. **Review and Refine**: Use `fetch_code` to review the code you've written. Update files if necessary using `update_file`.\n"
-                "5. **Ensure Completeness**: Do not leave any placeholders or incomplete code. All functions, routes, and templates must be fully implemented and ready for production.\n"
-                "6. **Do Not Modify `main.py`**: Focus only on the `templates/`, `static/`, and `routes/` directories.\n"
-                "7. **Finalize**: Once everything is complete and thoroughly tested, call `task_completed()` to finish.\n\n"
-                "Constraints and Notes:\n"
-                "- The application files must be structured within the predefined directories: `templates/`, `static/`, and `routes/`.\n"
-                "- Routes should be modular and placed inside the `routes/` directory as separate Python files.\n"
-                "- The `index.html` served from the `templates/` directory is the entry point of the app. Update it appropriately if additional templates are created.\n"
-                "- Do not use placeholders like 'Content goes here'. All code should be complete and functional.\n"
-                "- Do not ask the user for additional input; infer any necessary details to complete the application.\n"
-                "- Ensure all routes are properly linked and that templates include necessary CSS and JS files.\n"
-                "- Handle any errors internally and attempt to resolve them before proceeding.\n\n"
-                "Available Tools:\n"
-                "- `create_directory(path)`: Create a new directory.\n"
-                "- `create_file(path, content)`: Create or overwrite a file with content.\n"
-                "- `update_file(path, content)`: Update an existing file with new content.\n"
-                "- `fetch_code(file_path)`: Retrieve the code from a file for review.\n"
-                "- `task_completed()`: Call this when the application is fully built and ready.\n\n"
-                "Remember to think carefully at each step, ensuring the application is complete, functional, and meets the user's requirements."
+                "You are an expert Flask developer tasked with building a complete, production-ready Flask application based on the user's description."
             )
         },
         {"role": "user", "content": user_input},
@@ -325,9 +311,8 @@ def run_main_loop(user_input):
 
     while iteration < max_iterations:
         progress["iteration"] = iteration + 1
-        # Create a new iteration dictionary for each loop
         current_iteration = {
-            "iteration": iteration + 1,  # Start from 1
+            "iteration": iteration + 1,
             "actions": [],
             "llm_responses": [],
             "tool_results": [],
@@ -457,5 +442,4 @@ def run_main_loop(user_input):
     return output
 
 if __name__ == '__main__':
-    # Start the Flask app
     app.run(host='0.0.0.0', port=8080)
